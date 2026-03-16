@@ -28,8 +28,7 @@ const { findProjectRoot, detectFormatter, resolveFormatterBin } = require('../li
 const MAX_STDIN = 1024 * 1024; // 1MB limit
 
 /**
- * Core logic — exported so run-with-flags.js can call directly
- * without spawning a child process.
+ * Core logic.
  *
  * @param {string} rawInput - Raw JSON string from stdin
  * @returns {string} The original input (pass-through)

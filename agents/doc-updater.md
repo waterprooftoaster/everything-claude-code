@@ -1,6 +1,6 @@
 ---
 name: doc-updater
-description: Documentation and codemap specialist. Use PROACTIVELY for updating codemaps and documentation. Runs /update-codemaps and /update-docs, generates docs/CODEMAPS/*, updates READMEs and guides.
+description: Documentation and codemap specialist. Use PROACTIVELY for updating documentation. Generates codemaps, updates READMEs and guides.
 tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
 model: haiku
 ---
@@ -20,7 +20,6 @@ You are a documentation specialist focused on keeping codemaps and documentation
 ## Analysis Commands
 
 ```bash
-npx tsx scripts/codemaps/generate.ts    # Generate codemaps
 npx madge --image graph.svg src/        # Dependency graph
 npx jsdoc2md src/**/*.ts                # Extract JSDoc
 ```

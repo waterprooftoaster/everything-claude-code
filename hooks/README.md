@@ -11,8 +11,6 @@ User request → Claude picks a tool → PreToolUse hook runs → Tool executes 
 - **PreToolUse** hooks run before the tool executes. They can **block** (exit code 2) or **warn** (stderr without blocking).
 - **PostToolUse** hooks run after the tool completes. They can analyze output but cannot block.
 - **Stop** hooks run after each Claude response.
-- **SessionStart/SessionEnd** hooks run at session lifecycle boundaries.
-- **PreCompact** hooks run before context compaction, useful for saving state.
 
 ## Hooks in This Plugin
 
@@ -20,12 +18,11 @@ User request → Claude picks a tool → PreToolUse hook runs → Tool executes 
 
 | Hook | Matcher | Behavior | Exit Code |
 |------|---------|----------|-----------|
-| **Dev server blocker** | `Bash` | Blocks `npm run dev` etc. outside tmux — ensures log access | 2 (blocks) |
+| **Auto tmux dev** | `Bash` | Auto-starts dev servers in tmux with directory-based session names | 0 |
 | **Tmux reminder** | `Bash` | Suggests tmux for long-running commands (npm test, cargo build, docker) | 0 (warns) |
 | **Git push reminder** | `Bash` | Reminds to review changes before `git push` | 0 (warns) |
-| **Doc file warning** | `Write` | Warns about non-standard `.md`/`.txt` files (allows README, CLAUDE, CONTRIBUTING, CHANGELOG, LICENSE, SKILL, docs/, skills/); cross-platform path handling | 0 (warns) |
+| **Doc file warning** | `Write` | Warns about non-standard `.md`/`.txt` files (allows README, CLAUDE, CONTRIBUTING, CHANGELOG, LICENSE, SKILL, docs/, skills/) | 0 (warns) |
 | **Strategic compact** | `Edit\|Write` | Suggests manual `/compact` at logical intervals (every ~50 tool calls) | 0 (warns) |
-| **InsAIts security monitor (opt-in)** | `Bash\|Write\|Edit\|MultiEdit` | Optional security scan for high-signal tool inputs. Disabled unless `ECC_ENABLE_INSAITS=1`. Blocks on critical findings, warns on non-critical, and writes audit log to `.insaits_audit_session.jsonl`. Requires `pip install insa-its`. [Details](../scripts/hooks/insaits-security-monitor.py) | 2 (blocks critical) / 0 (warns) |
 
 ### PostToolUse Hooks
 
@@ -34,21 +31,15 @@ User request → Claude picks a tool → PreToolUse hook runs → Tool executes 
 | **PR logger** | `Bash` | Logs PR URL and review command after `gh pr create` |
 | **Build analysis** | `Bash` | Background analysis after build commands (async, non-blocking) |
 | **Quality gate** | `Edit\|Write\|MultiEdit` | Runs fast quality checks after edits |
-| **Prettier format** | `Edit` | Auto-formats JS/TS files with Prettier after edits |
+| **Auto-format** | `Edit` | Auto-formats JS/TS files after edits (auto-detects Biome or Prettier) |
 | **TypeScript check** | `Edit` | Runs `tsc --noEmit` after editing `.ts`/`.tsx` files |
 | **console.log warning** | `Edit` | Warns about `console.log` statements in edited files |
 
-### Lifecycle Hooks
+### Stop Hooks
 
-| Hook | Event | What It Does |
-|------|-------|-------------|
-| **Session start** | `SessionStart` | Loads previous context and detects package manager |
-| **Pre-compact** | `PreCompact` | Saves state before context compaction |
-| **Console.log audit** | `Stop` | Checks all modified files for `console.log` after each response |
-| **Session summary** | `Stop` | Persists session state when transcript path is available |
-| **Pattern extraction** | `Stop` | Evaluates session for extractable patterns (continuous learning) |
-| **Cost tracker** | `Stop` | Emits lightweight run-cost telemetry markers |
-| **Session end marker** | `SessionEnd` | Lifecycle marker and cleanup log |
+| Hook | Matcher | What It Does |
+|------|---------|-------------|
+| **Console.log audit** | `*` | Checks all modified files for `console.log` after each response |
 
 ## Customizing Hooks
 
@@ -69,23 +60,6 @@ Remove or comment out the hook entry in `hooks.json`. If installed as a plugin, 
   }
 }
 ```
-
-### Runtime Hook Controls (Recommended)
-
-Use environment variables to control hook behavior without editing `hooks.json`:
-
-```bash
-# minimal | standard | strict (default: standard)
-export ECC_HOOK_PROFILE=standard
-
-# Disable specific hook IDs (comma-separated)
-export ECC_DISABLED_HOOKS="pre:bash:tmux-reminder,post:edit:typecheck"
-```
-
-Profiles:
-- `minimal` — keep essential lifecycle and safety hooks only.
-- `standard` — default; balanced quality + safety checks.
-- `strict` — enables additional reminders and stricter guardrails.
 
 ### Writing Your Own Hook
 
@@ -195,25 +169,11 @@ Async hooks run in the background. They cannot block tool execution.
 }
 ```
 
-### Require test files alongside new source files
-
-```json
-{
-  "matcher": "Write",
-  "hooks": [{
-    "type": "command",
-    "command": "node -e \"const fs=require('fs');let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const i=JSON.parse(d);const p=i.tool_input?.file_path||'';if(/src\\/.*\\.(ts|js)$/.test(p)&&!/\\.test\\.|\\.spec\\./.test(p)){const testPath=p.replace(/\\.(ts|js)$/,'.test.$1');if(!fs.existsSync(testPath)){console.error('[Hook] No test file found for: '+p);console.error('[Hook] Expected: '+testPath);console.error('[Hook] Consider writing tests first (/tdd)')}}console.log(d)})\""
-  }],
-  "description": "Remind to create tests when adding new source files"
-}
-```
-
 ## Cross-Platform Notes
 
-Hook logic is implemented in Node.js scripts for cross-platform behavior on Windows, macOS, and Linux. A small number of shell wrappers are retained for continuous-learning observer hooks; those wrappers are profile-gated and have Windows-safe fallback behavior.
+Hook logic is implemented in Node.js scripts for cross-platform behavior on Windows, macOS, and Linux.
 
 ## Related
 
 - [rules/common/hooks.md](../rules/common/hooks.md) — Hook architecture guidelines
-- [skills/strategic-compact/](../skills/strategic-compact/) — Strategic compaction skill
 - [scripts/hooks/](../scripts/hooks/) — Hook script implementations

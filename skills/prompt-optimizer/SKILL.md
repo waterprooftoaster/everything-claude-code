@@ -123,7 +123,7 @@ Map intent + scope + tech stack (from Phase 0) to specific ECC components.
 | Research | /plan | search-first, iterative-retrieval | — |
 | Testing | /tdd, /e2e, /test-coverage | tdd-workflow, e2e-testing | tdd-guide, e2e-runner |
 | Review | /code-review | security-review | code-reviewer, security-reviewer |
-| Documentation | /update-docs, /update-codemaps | — | doc-updater |
+| Documentation | /update-docs | — | doc-updater |
 | Infrastructure | /plan, /verify | docker-patterns, deployment-patterns, database-migrations | architect |
 | Design (MEDIUM-HIGH) | /plan | — | planner, architect |
 | Design (EPIC) | — | blueprint (invoke as skill) | planner, architect |
@@ -246,7 +246,7 @@ A compact version for experienced ECC users. Vary by intent type:
 | Research | `Use search-first skill for [topic]. /plan based on findings.` |
 | Testing | `/tdd [module]. /e2e for critical flows. /test-coverage.` |
 | Review | `/code-review. Then use security-reviewer agent.` |
-| Docs | `/update-docs. /update-codemaps.` |
+| Docs | `/update-docs.` |
 | EPIC | `Use blueprint skill for "[objective]". Execute phases with /verify gates.` |
 
 ### Section 5: Enhancement Rationale
