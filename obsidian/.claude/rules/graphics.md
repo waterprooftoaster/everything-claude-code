@@ -1,0 +1,3 @@
+- Use ASCII table graphics inside ``` blocks for visual concepts (caches, page tables, memory diagrams, etc.).
+- Graphics use `+`, `-`, `|` borders, not `[ ]` bracket style.
+- Use graphics for conceptually heavy topics. Less conceptual topics (algorithms, syntax) don't need them.

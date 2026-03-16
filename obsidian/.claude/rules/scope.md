@@ -1,0 +1,2 @@
+- Only modify files explicitly specified by the user.
+- Do not change anything the user has written unless specifically asked.
