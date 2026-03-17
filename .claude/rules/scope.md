@@ -1,2 +1,3 @@
 - Only modify files explicitly specified by the user.
 - Do not change anything the user has written unless specifically asked.
+- When working on a file, explain the concepts in that file in a vaccuum. Only link to other files if the concept of that link is mandatory to understand the current concept. This way we can build a true knowledge dependency graph.
