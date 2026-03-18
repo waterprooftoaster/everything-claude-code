@@ -41,10 +41,10 @@ ALWAYS write tests first, then implement code to make tests pass.
 - Service interactions
 - External API calls
 
-#### E2E Tests (Playwright)
+#### E2E Tests (Detox)
 - Critical user flows
 - Complete workflows
-- Browser automation
+- Native device automation
 - UI interactions
 
 ## TDD Workflow Steps
@@ -120,22 +120,22 @@ npm run test:coverage
 
 ### Unit Test Pattern (Jest/Vitest)
 ```typescript
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react-native'
 import { Button } from './Button'
 
 describe('Button Component', () => {
   it('renders with correct text', () => {
     render(<Button>Click me</Button>)
-    expect(screen.getByText('Click me')).toBeInTheDocument()
+    expect(screen.getByText('Click me')).toBeTruthy()
   })
 
-  it('calls onClick when clicked', () => {
-    const handleClick = jest.fn()
-    render(<Button onClick={handleClick}>Click</Button>)
+  it('calls onPress when pressed', () => {
+    const handlePress = jest.fn()
+    render(<Button onPress={handlePress}>Click</Button>)
 
-    fireEvent.click(screen.getByRole('button'))
+    fireEvent.press(screen.getByRole('button'))
 
-    expect(handleClick).toHaveBeenCalledTimes(1)
+    expect(handlePress).toHaveBeenCalledTimes(1)
   })
 
   it('is disabled when disabled prop is true', () => {
@@ -145,111 +145,129 @@ describe('Button Component', () => {
 })
 ```
 
-### API Integration Test Pattern
+### Service Integration Test Pattern
 ```typescript
-import { NextRequest } from 'next/server'
-import { GET } from './route'
+import { fetchMarkets } from '@/services/marketService'
 
-describe('GET /api/markets', () => {
+jest.spyOn(global, 'fetch')
+
+describe('fetchMarkets', () => {
   it('returns markets successfully', async () => {
-    const request = new NextRequest('http://localhost/api/markets')
-    const response = await GET(request)
-    const data = await response.json()
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, data: [{ id: 1, name: 'Test Market' }] }),
+    })
 
-    expect(response.status).toBe(200)
-    expect(data.success).toBe(true)
-    expect(Array.isArray(data.data)).toBe(true)
+    const result = await fetchMarkets()
+
+    expect(result.success).toBe(true)
+    expect(Array.isArray(result.data)).toBe(true)
   })
 
-  it('validates query parameters', async () => {
-    const request = new NextRequest('http://localhost/api/markets?limit=invalid')
-    const response = await GET(request)
+  it('returns error on invalid response', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+    })
 
-    expect(response.status).toBe(400)
+    const result = await fetchMarkets()
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBeDefined()
   })
 
-  it('handles database errors gracefully', async () => {
-    // Mock database failure
-    const request = new NextRequest('http://localhost/api/markets')
-    // Test error handling
+  it('handles network errors gracefully', async () => {
+    ;(global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'))
+
+    const result = await fetchMarkets()
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Network error')
   })
 })
 ```
 
-### E2E Test Pattern (Playwright)
+### E2E Test Pattern (Detox)
 ```typescript
-import { test, expect } from '@playwright/test'
+import { by, device, element, expect, waitFor } from 'detox'
 
-test('user can search and filter markets', async ({ page }) => {
-  // Navigate to markets page
-  await page.goto('/')
-  await page.click('a[href="/markets"]')
+describe('Markets', () => {
+  beforeAll(async () => {
+    await device.launchApp({ newInstance: true })
+  })
 
-  // Verify page loaded
-  await expect(page.locator('h1')).toContainText('Markets')
+  beforeEach(async () => {
+    await device.reloadReactNative()
+  })
 
-  // Search for markets
-  await page.fill('input[placeholder="Search markets"]', 'election')
+  it('user can search and filter markets', async () => {
+    // Navigate to markets tab
+    await element(by.id('tab-markets')).tap()
 
-  // Wait for debounce and results
-  await page.waitForTimeout(600)
+    // Verify screen loaded
+    await waitFor(element(by.id('markets-screen')))
+      .toBeVisible()
+      .withTimeout(5000)
 
-  // Verify search results displayed
-  const results = page.locator('[data-testid="market-card"]')
-  await expect(results).toHaveCount(5, { timeout: 5000 })
+    // Search for markets
+    await element(by.id('search-input')).typeText('election')
 
-  // Verify results contain search term
-  const firstResult = results.first()
-  await expect(firstResult).toContainText('election', { ignoreCase: true })
+    // Verify search results displayed
+    await waitFor(element(by.id('market-card-0')))
+      .toBeVisible()
+      .withTimeout(5000)
 
-  // Filter by status
-  await page.click('button:has-text("Active")')
+    // Filter by status
+    await element(by.id('filter-active')).tap()
 
-  // Verify filtered results
-  await expect(results).toHaveCount(3)
-})
+    // Verify filtered results
+    await expect(element(by.id('market-card-0'))).toBeVisible()
+  })
 
-test('user can create a new market', async ({ page }) => {
-  // Login first
-  await page.goto('/creator-dashboard')
+  it('user can create a new market', async () => {
+    // Navigate to creator dashboard
+    await element(by.id('tab-create')).tap()
 
-  // Fill market creation form
-  await page.fill('input[name="name"]', 'Test Market')
-  await page.fill('textarea[name="description"]', 'Test description')
-  await page.fill('input[name="endDate"]', '2025-12-31')
+    // Fill market creation form
+    await element(by.id('input-name')).typeText('Test Market')
+    await element(by.id('input-description')).typeText('Test description')
+    await element(by.id('input-end-date')).typeText('2025-12-31')
 
-  // Submit form
-  await page.click('button[type="submit"]')
+    // Submit form
+    await element(by.id('submit-button')).tap()
 
-  // Verify success message
-  await expect(page.locator('text=Market created successfully')).toBeVisible()
+    // Verify success message
+    await waitFor(element(by.text('Market created successfully')))
+      .toBeVisible()
+      .withTimeout(5000)
 
-  // Verify redirect to market page
-  await expect(page).toHaveURL(/\/markets\/test-market/)
+    // Verify navigation to market detail
+    await expect(element(by.id('market-detail-screen'))).toBeVisible()
+  })
 })
 ```
 
 ## Test File Organization
 
 ```
-src/
+app/
 ├── components/
 │   ├── Button/
 │   │   ├── Button.tsx
-│   │   ├── Button.test.tsx          # Unit tests
-│   │   └── Button.stories.tsx       # Storybook
+│   │   └── Button.test.tsx          # Unit tests
 │   └── MarketCard/
 │       ├── MarketCard.tsx
 │       └── MarketCard.test.tsx
-├── app/
-│   └── api/
-│       └── markets/
-│           ├── route.ts
-│           └── route.test.ts         # Integration tests
+├── screens/
+│   ├── MarketsScreen.tsx
+│   └── MarketsScreen.test.tsx
+├── services/
+│   ├── marketService.ts
+│   └── marketService.test.ts         # Integration tests
 └── e2e/
-    ├── markets.spec.ts               # E2E tests
-    ├── trading.spec.ts
-    └── auth.spec.ts
+    ├── markets.test.ts               # E2E tests
+    ├── trading.test.ts
+    └── auth.test.ts
 ```
 
 ## Mocking External Services
@@ -323,20 +341,20 @@ expect(component.state.count).toBe(5)
 ### ✅ CORRECT: Test User-Visible Behavior
 ```typescript
 // Test what users see
-expect(screen.getByText('Count: 5')).toBeInTheDocument()
+expect(screen.getByText('Count: 5')).toBeTruthy()
 ```
 
 ### ❌ WRONG: Brittle Selectors
 ```typescript
 // Breaks easily
-await page.click('.css-class-xyz')
+await element(by.type('RCTView')).tap()
 ```
 
 ### ✅ CORRECT: Semantic Selectors
 ```typescript
 // Resilient to changes
-await page.click('button:has-text("Submit")')
-await page.click('[data-testid="submit-button"]')
+await element(by.id('submit-button')).tap()
+await element(by.text('Submit')).tap()
 ```
 
 ### ❌ WRONG: No Test Isolation

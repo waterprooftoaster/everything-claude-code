@@ -1,22 +1,22 @@
 ---
 name: frontend-patterns
-description: Frontend development patterns for React, Next.js, state management, performance optimization, and UI best practices.
+description: Frontend development patterns for React Native, Expo, state management, performance optimization, and mobile UI best practices.
 origin: ECC
 ---
 
 # Frontend Development Patterns
 
-Modern frontend patterns for React, Next.js, and performant user interfaces.
+Modern frontend patterns for React Native, Expo, and performant mobile user interfaces.
 
 ## When to Activate
 
-- Building React components (composition, props, rendering)
+- Building React Native components (composition, props, rendering)
 - Managing state (useState, useReducer, Zustand, Context)
-- Implementing data fetching (SWR, React Query, server components)
-- Optimizing performance (memoization, virtualization, code splitting)
+- Implementing data fetching (React Query, SWR, Expo API routes)
+- Optimizing performance (memoization, FlatList, lazy screens)
 - Working with forms (validation, controlled inputs, Zod schemas)
-- Handling client-side routing and navigation
-- Building accessible, responsive UI patterns
+- Handling navigation with Expo Router
+- Building accessible, responsive mobile UI patterns
 
 ## Component Patterns
 
@@ -24,33 +24,49 @@ Modern frontend patterns for React, Next.js, and performant user interfaces.
 
 ```typescript
 // ✅ GOOD: Component composition
+import { View, StyleSheet } from 'react-native'
+
 interface CardProps {
   children: React.ReactNode
   variant?: 'default' | 'outlined'
 }
 
 export function Card({ children, variant = 'default' }: CardProps) {
-  return <div className={`card card-${variant}`}>{children}</div>
+  return (
+    <View style={[styles.card, variant === 'outlined' && styles.cardOutlined]}>
+      {children}
+    </View>
+  )
 }
 
 export function CardHeader({ children }: { children: React.ReactNode }) {
-  return <div className="card-header">{children}</div>
+  return <View style={styles.cardHeader}>{children}</View>
 }
 
 export function CardBody({ children }: { children: React.ReactNode }) {
-  return <div className="card-body">{children}</div>
+  return <View style={styles.cardBody}>{children}</View>
 }
+
+const styles = StyleSheet.create({
+  card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  cardOutlined: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#e0e0e0' },
+  cardHeader: { marginBottom: 8 },
+  cardBody: { flex: 1 },
+})
 
 // Usage
 <Card>
-  <CardHeader>Title</CardHeader>
-  <CardBody>Content</CardBody>
+  <CardHeader><Text>Title</Text></CardHeader>
+  <CardBody><Text>Content</Text></CardBody>
 </Card>
 ```
 
 ### Compound Components
 
 ```typescript
+import { createContext, useContext, useState } from 'react'
+import { Pressable, View, Text, StyleSheet } from 'react-native'
+
 interface TabsContextValue {
   activeTab: string
   setActiveTab: (tab: string) => void
@@ -66,13 +82,13 @@ export function Tabs({ children, defaultTab }: {
 
   return (
     <TabsContext.Provider value={{ activeTab, setActiveTab }}>
-      {children}
+      <View>{children}</View>
     </TabsContext.Provider>
   )
 }
 
 export function TabList({ children }: { children: React.ReactNode }) {
-  return <div className="tab-list">{children}</div>
+  return <View style={styles.tabList}>{children}</View>
 }
 
 export function Tab({ id, children }: { id: string, children: React.ReactNode }) {
@@ -80,14 +96,24 @@ export function Tab({ id, children }: { id: string, children: React.ReactNode })
   if (!context) throw new Error('Tab must be used within Tabs')
 
   return (
-    <button
-      className={context.activeTab === id ? 'active' : ''}
-      onClick={() => context.setActiveTab(id)}
+    <Pressable
+      style={[styles.tab, context.activeTab === id && styles.tabActive]}
+      onPress={() => context.setActiveTab(id)}
     >
-      {children}
-    </button>
+      <Text style={context.activeTab === id ? styles.tabTextActive : styles.tabText}>
+        {children}
+      </Text>
+    </Pressable>
   )
 }
+
+const styles = StyleSheet.create({
+  tabList: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
+  tab: { paddingVertical: 12, paddingHorizontal: 16 },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: '#007AFF' },
+  tabText: { color: '#666' },
+  tabTextActive: { color: '#007AFF', fontWeight: '600' },
+})
 
 // Usage
 <Tabs defaultTab="overview">
@@ -102,31 +128,30 @@ export function Tab({ id, children }: { id: string, children: React.ReactNode })
 
 ```typescript
 interface DataLoaderProps<T> {
-  url: string
+  fetcher: () => Promise<T>
   children: (data: T | null, loading: boolean, error: Error | null) => React.ReactNode
 }
 
-export function DataLoader<T>({ url, children }: DataLoaderProps<T>) {
+export function DataLoader<T>({ fetcher, children }: DataLoaderProps<T>) {
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
-    fetch(url)
-      .then(res => res.json())
+    fetcher()
       .then(setData)
       .catch(setError)
       .finally(() => setLoading(false))
-  }, [url])
+  }, [fetcher])
 
   return <>{children(data, loading, error)}</>
 }
 
 // Usage
-<DataLoader<Market[]> url="/api/markets">
+<DataLoader<Market[]> fetcher={() => fetch('/api/markets').then(r => r.json())}>
   {(markets, loading, error) => {
-    if (loading) return <Spinner />
-    if (error) return <Error error={error} />
+    if (loading) return <ActivityIndicator />
+    if (error) return <ErrorView error={error} />
     return <MarketList markets={markets!} />
   }}
 </DataLoader>
@@ -194,16 +219,6 @@ export function useQuery<T>(
 
   return { data, error, loading, refetch }
 }
-
-// Usage
-const { data: markets, loading, error, refetch } = useQuery(
-  'markets',
-  () => fetch('/api/markets').then(r => r.json()),
-  {
-    onSuccess: data => console.log('Fetched', data.length, 'markets'),
-    onError: err => console.error('Failed:', err)
-  }
-)
 ```
 
 ### Debounce Hook
@@ -239,6 +254,8 @@ useEffect(() => {
 ### Context + Reducer Pattern
 
 ```typescript
+import { createContext, useContext, useReducer, Dispatch } from 'react'
+
 interface State {
   markets: Market[]
   selectedMarket: Market | null
@@ -307,80 +324,154 @@ const handleSearch = useCallback((query: string) => {
 // ✅ React.memo for pure components
 export const MarketCard = React.memo<MarketCardProps>(({ market }) => {
   return (
-    <div className="market-card">
-      <h3>{market.name}</h3>
-      <p>{market.description}</p>
-    </div>
+    <View style={styles.marketCard}>
+      <Text style={styles.marketName}>{market.name}</Text>
+      <Text style={styles.marketDescription}>{market.description}</Text>
+    </View>
   )
 })
 ```
 
-### Code Splitting & Lazy Loading
+### FlatList for Long Lists
 
 ```typescript
-import { lazy, Suspense } from 'react'
+import { FlatList, View, Text, StyleSheet } from 'react-native'
 
-// ✅ Lazy load heavy components
-const HeavyChart = lazy(() => import('./HeavyChart'))
-const ThreeJsBackground = lazy(() => import('./ThreeJsBackground'))
+interface MarketListProps {
+  markets: Market[]
+  onMarketPress: (market: Market) => void
+}
 
-export function Dashboard() {
+export function MarketList({ markets, onMarketPress }: MarketListProps) {
+  const renderItem = useCallback(({ item }: { item: Market }) => (
+    <Pressable onPress={() => onMarketPress(item)} testID={`market-card-${item.id}`}>
+      <MarketCard market={item} />
+    </Pressable>
+  ), [onMarketPress])
+
+  const keyExtractor = useCallback((item: Market) => item.id, [])
+
   return (
-    <div>
-      <Suspense fallback={<ChartSkeleton />}>
-        <HeavyChart data={data} />
-      </Suspense>
-
-      <Suspense fallback={null}>
-        <ThreeJsBackground />
-      </Suspense>
-    </div>
+    <FlatList
+      data={markets}
+      renderItem={renderItem}
+      keyExtractor={keyExtractor}
+      initialNumToRender={10}
+      maxToRenderPerBatch={10}
+      windowSize={5}
+      removeClippedSubviews={true}
+      getItemLayout={(_, index) => ({
+        length: 100,
+        offset: 100 * index,
+        index,
+      })}
+      testID="market-list"
+    />
   )
 }
 ```
 
-### Virtualization for Long Lists
+### Expo Router Navigation
 
 ```typescript
-import { useVirtualizer } from '@tanstack/react-virtual'
+// app/(tabs)/_layout.tsx
+import { Tabs } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 
-export function VirtualMarketList({ markets }: { markets: Market[] }) {
-  const parentRef = useRef<HTMLDivElement>(null)
-
-  const virtualizer = useVirtualizer({
-    count: markets.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 100,  // Estimated row height
-    overscan: 5  // Extra items to render
-  })
-
+export default function TabLayout() {
   return (
-    <div ref={parentRef} style={{ height: '600px', overflow: 'auto' }}>
-      <div
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          position: 'relative'
+    <Tabs screenOptions={{ tabBarActiveTintColor: '#007AFF' }}>
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home" size={size} color={color} />
+          ),
         }}
-      >
-        {virtualizer.getVirtualItems().map(virtualRow => (
-          <div
-            key={virtualRow.index}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: `${virtualRow.size}px`,
-              transform: `translateY(${virtualRow.start}px)`
-            }}
-          >
-            <MarketCard market={markets[virtualRow.index]} />
-          </div>
-        ))}
-      </div>
-    </div>
+      />
+      <Tabs.Screen
+        name="markets"
+        options={{
+          title: 'Markets',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="trending-up" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person" size={size} color={color} />
+          ),
+        }}
+      />
+    </Tabs>
   )
 }
+
+// Typed navigation with Expo Router
+import { useRouter, useLocalSearchParams } from 'expo-router'
+
+export function MarketCard({ market }: { market: Market }) {
+  const router = useRouter()
+
+  return (
+    <Pressable onPress={() => router.push(`/markets/${market.id}`)}>
+      <View style={styles.card}>
+        <Text>{market.name}</Text>
+      </View>
+    </Pressable>
+  )
+}
+
+// Dynamic route: app/markets/[id].tsx
+export default function MarketDetailsScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>()
+  // fetch market by id...
+}
+```
+
+## StyleSheet Patterns
+
+```typescript
+import { StyleSheet, Platform } from 'react-native'
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 16,
+  },
+  // Platform-specific styles
+  shadow: {
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  // Responsive text
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    lineHeight: 32,
+  },
+  body: {
+    fontSize: 16,
+    color: '#666',
+    lineHeight: 24,
+  },
+})
 ```
 
 ## Form Handling Patterns
@@ -388,6 +479,8 @@ export function VirtualMarketList({ markets }: { markets: Market[] }) {
 ### Controlled Form with Validation
 
 ```typescript
+import { View, TextInput, Text, Pressable, StyleSheet, Alert } from 'react-native'
+
 interface FormData {
   name: string
   description: string
@@ -430,34 +523,45 @@ export function CreateMarketForm() {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
+  const handleSubmit = async () => {
     if (!validate()) return
 
     try {
       await createMarket(formData)
-      // Success handling
+      Alert.alert('Success', 'Market created!')
     } catch (error) {
-      // Error handling
+      Alert.alert('Error', 'Failed to create market')
     }
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <input
+    <View style={styles.form}>
+      <TextInput
         value={formData.name}
-        onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
+        onChangeText={name => setFormData(prev => ({ ...prev, name }))}
         placeholder="Market name"
+        style={[styles.input, errors.name && styles.inputError]}
+        testID="market-name-input"
       />
-      {errors.name && <span className="error">{errors.name}</span>}
+      {errors.name && <Text style={styles.error}>{errors.name}</Text>}
 
       {/* Other fields */}
 
-      <button type="submit">Create Market</button>
-    </form>
+      <Pressable onPress={handleSubmit} style={styles.button} testID="submit-btn">
+        <Text style={styles.buttonText}>Create Market</Text>
+      </Pressable>
+    </View>
   )
 }
+
+const styles = StyleSheet.create({
+  form: { padding: 16 },
+  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, fontSize: 16, marginBottom: 8 },
+  inputError: { borderColor: '#ff3b30' },
+  error: { color: '#ff3b30', fontSize: 12, marginBottom: 8 },
+  button: { backgroundColor: '#007AFF', borderRadius: 8, padding: 16, alignItems: 'center' },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+})
 ```
 
 ## Error Boundary Pattern
@@ -488,13 +592,16 @@ export class ErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="error-fallback">
-          <h2>Something went wrong</h2>
-          <p>{this.state.error?.message}</p>
-          <button onClick={() => this.setState({ hasError: false })}>
-            Try again
-          </button>
-        </div>
+        <View style={styles.errorFallback}>
+          <Text style={styles.errorTitle}>Something went wrong</Text>
+          <Text style={styles.errorMessage}>{this.state.error?.message}</Text>
+          <Pressable
+            onPress={() => this.setState({ hasError: false })}
+            style={styles.retryButton}
+          >
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
       )
     }
 
@@ -510,97 +617,88 @@ export class ErrorBoundary extends React.Component<
 
 ## Animation Patterns
 
-### Framer Motion Animations
+### React Native Reanimated
 
 ```typescript
-import { motion, AnimatePresence } from 'framer-motion'
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  FadeIn,
+  FadeOut,
+  Layout,
+} from 'react-native-reanimated'
 
-// ✅ List animations
-export function AnimatedMarketList({ markets }: { markets: Market[] }) {
+// ✅ Animated list items
+export function AnimatedMarketCard({ market }: { market: Market }) {
   return (
-    <AnimatePresence>
-      {markets.map(market => (
-        <motion.div
-          key={market.id}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.3 }}
-        >
-          <MarketCard market={market} />
-        </motion.div>
-      ))}
-    </AnimatePresence>
+    <Animated.View
+      entering={FadeIn.duration(300)}
+      exiting={FadeOut.duration(200)}
+      layout={Layout.springify()}
+    >
+      <MarketCard market={market} />
+    </Animated.View>
   )
 }
 
-// ✅ Modal animations
-export function Modal({ isOpen, onClose, children }: ModalProps) {
+// ✅ Animated modal / bottom sheet
+export function AnimatedModal({ isOpen, onClose, children }: ModalProps) {
+  const translateY = useSharedValue(300)
+
+  useEffect(() => {
+    translateY.value = isOpen ? withSpring(0) : withTiming(300)
+  }, [isOpen])
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }))
+
+  if (!isOpen) return null
+
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          <motion.div
-            className="modal-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-          />
-          <motion.div
-            className="modal-content"
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          >
-            {children}
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+    <View style={StyleSheet.absoluteFill}>
+      <Pressable style={styles.overlay} onPress={onClose} />
+      <Animated.View style={[styles.modalContent, animatedStyle]}>
+        {children}
+      </Animated.View>
+    </View>
   )
 }
 ```
 
 ## Accessibility Patterns
 
-### Keyboard Navigation
+### React Native Accessibility Props
 
 ```typescript
-export function Dropdown({ options, onSelect }: DropdownProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [activeIndex, setActiveIndex] = useState(0)
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault()
-        setActiveIndex(i => Math.min(i + 1, options.length - 1))
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        setActiveIndex(i => Math.max(i - 1, 0))
-        break
-      case 'Enter':
-        e.preventDefault()
-        onSelect(options[activeIndex])
-        setIsOpen(false)
-        break
-      case 'Escape':
-        setIsOpen(false)
-        break
-    }
-  }
-
+export function MarketCard({ market, onPress }: MarketCardProps) {
   return (
-    <div
-      role="combobox"
-      aria-expanded={isOpen}
-      aria-haspopup="listbox"
-      onKeyDown={handleKeyDown}
+    <Pressable
+      onPress={onPress}
+      accessible={true}
+      accessibilityRole="button"
+      accessibilityLabel={`${market.name} market`}
+      accessibilityHint="Double tap to view market details"
+      testID={`market-card-${market.id}`}
     >
-      {/* Dropdown implementation */}
-    </div>
+      <View style={styles.card}>
+        <Text
+          style={styles.name}
+          accessibilityRole="header"
+        >
+          {market.name}
+        </Text>
+        <Text style={styles.description}>{market.description}</Text>
+        <Text
+          style={styles.price}
+          accessibilityLabel={`Price: ${market.price} dollars`}
+        >
+          ${market.price}
+        </Text>
+      </View>
+    </Pressable>
   )
 }
 ```
@@ -608,35 +706,33 @@ export function Dropdown({ options, onSelect }: DropdownProps) {
 ### Focus Management
 
 ```typescript
-export function Modal({ isOpen, onClose, children }: ModalProps) {
-  const modalRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
+import { useRef } from 'react'
+import { TextInput, AccessibilityInfo, Platform } from 'react-native'
+
+export function SearchScreen() {
+  const searchInputRef = useRef<TextInput>(null)
 
   useEffect(() => {
-    if (isOpen) {
-      // Save currently focused element
-      previousFocusRef.current = document.activeElement as HTMLElement
+    // Auto-focus search input on screen mount
+    const timeout = setTimeout(() => {
+      searchInputRef.current?.focus()
+      if (Platform.OS === 'ios') {
+        AccessibilityInfo.announceForAccessibility('Search screen opened')
+      }
+    }, 500)
 
-      // Focus modal
-      modalRef.current?.focus()
-    } else {
-      // Restore focus when closing
-      previousFocusRef.current?.focus()
-    }
-  }, [isOpen])
+    return () => clearTimeout(timeout)
+  }, [])
 
-  return isOpen ? (
-    <div
-      ref={modalRef}
-      role="dialog"
-      aria-modal="true"
-      tabIndex={-1}
-      onKeyDown={e => e.key === 'Escape' && onClose()}
-    >
-      {children}
-    </div>
-  ) : null
+  return (
+    <TextInput
+      ref={searchInputRef}
+      placeholder="Search markets..."
+      accessibilityLabel="Search markets"
+      testID="search-input"
+    />
+  )
 }
 ```
 
-**Remember**: Modern frontend patterns enable maintainable, performant user interfaces. Choose patterns that fit your project complexity.
+**Remember**: Modern React Native patterns enable maintainable, performant mobile interfaces. Choose patterns that fit your project complexity. Always test on both iOS and Android.

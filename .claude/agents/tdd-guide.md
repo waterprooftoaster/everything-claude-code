@@ -45,7 +45,7 @@ npm run test:coverage
 |------|-------------|------|
 | **Unit** | Individual functions in isolation | Always |
 | **Integration** | API endpoints, database operations | Always |
-| **E2E** | Critical user flows (Playwright) | Critical paths |
+| **E2E** | Critical user flows (Detox) | Critical paths |
 
 ## Edge Cases You MUST Test
 

@@ -1,38 +1,40 @@
 ---
-description: Generate and run end-to-end tests with Playwright. Creates test journeys, runs tests, captures screenshots/videos/traces, and uploads artifacts.
+description: Generate and run end-to-end tests with Detox. Creates test journeys, runs tests on iOS/Android simulators, captures screenshots/device logs, and uploads artifacts.
 ---
 
 # E2E Command
 
-This command invokes the **e2e-runner** agent to generate, maintain, and execute end-to-end tests using Playwright.
+This command invokes the **e2e-runner** agent to generate, maintain, and execute end-to-end tests using Detox for React Native / Expo.
 
 ## What This Command Does
 
-1. **Generate Test Journeys** - Create Playwright tests for user flows
-2. **Run E2E Tests** - Execute tests across browsers
-3. **Capture Artifacts** - Screenshots, videos, traces on failures
-4. **Upload Results** - HTML reports and JUnit XML
+1. **Generate Test Journeys** - Create Detox tests for user flows
+2. **Run E2E Tests** - Execute tests on iOS simulator and Android emulator
+3. **Capture Artifacts** - Screenshots, device logs, videos on failures
+4. **Upload Results** - JUnit XML and artifact bundles for CI
 5. **Identify Flaky Tests** - Quarantine unstable tests
 
 ## When to Use
 
 Use `/e2e` when:
 - Testing critical user journeys (login, trading, payments)
-- Verifying multi-step flows work end-to-end
-- Testing UI interactions and navigation
-- Validating integration between frontend and backend
-- Preparing for production deployment
+- Verifying multi-step flows work end-to-end on mobile
+- Testing UI interactions and navigation (tabs, stacks, modals)
+- Validating deep linking and Expo Router navigation
+- Preparing for App Store / Play Store submission
+- Verifying behavior across iOS and Android
 
 ## How It Works
 
 The e2e-runner agent will:
 
 1. **Analyze user flow** and identify test scenarios
-2. **Generate Playwright test** using Page Object Model pattern
-3. **Run tests** across multiple browsers (Chrome, Firefox, Safari)
-4. **Capture failures** with screenshots, videos, and traces
-5. **Generate report** with results and artifacts
-6. **Identify flaky tests** and recommend fixes
+2. **Generate Detox test** using Screen Object Model pattern
+3. **Build the app** for iOS simulator and/or Android emulator
+4. **Run tests** on target devices
+5. **Capture failures** with screenshots, device logs, and videos
+6. **Generate report** with results and artifacts
+7. **Identify flaky tests** and recommend fixes
 
 ## Example Usage
 
@@ -44,114 +46,119 @@ Agent (e2e-runner):
 
 ## Test Scenario Identified
 
-**User Journey:** Market Search → View Results → Click Market → View Details
+**User Journey:** Market Search → View Results → Tap Market → View Details
 
 **Test Coverage:**
-1. Navigate to markets page
-2. Perform semantic search
-3. Verify search results
-4. Click on first result
-5. Verify market details page loads
-6. Verify chart renders
+1. Navigate to markets tab
+2. Perform search
+3. Verify search results appear
+4. Tap on first result
+5. Verify market details screen loads
+6. Verify chart component renders
 
 ## Generated Test Code
 
 ```typescript
-// tests/e2e/markets/search-and-view.spec.ts
-import { test, expect } from '@playwright/test'
-import { MarketsPage } from '../../pages/MarketsPage'
-import { MarketDetailsPage } from '../../pages/MarketDetailsPage'
+// e2e/screens/MarketsScreen.ts
+export class MarketsScreen {
+  static get header() { return element(by.id('markets-header')) }
+  static get searchInput() { return element(by.id('search-input')) }
+  static get marketCards() { return element(by.id('market-card')) }
+  static get firstMarketCard() { return element(by.id('market-card')).atIndex(0) }
+  static get noResults() { return element(by.id('no-results')) }
 
-test.describe('Market Search and View Flow', () => {
-  test('user can search markets and view details', async ({ page }) => {
-    // 1. Navigate to markets page
-    const marketsPage = new MarketsPage(page)
-    await marketsPage.goto()
+  static async navigateTo() {
+    await element(by.id('tab-markets')).tap()
+    await waitFor(MarketsScreen.header).toBeVisible().withTimeout(5000)
+  }
 
-    // Verify page loaded
-    await expect(page).toHaveTitle(/Markets/)
-    await expect(page.locator('h1')).toContainText('Markets')
+  static async search(query: string) {
+    await MarketsScreen.searchInput.clearText()
+    await MarketsScreen.searchInput.typeText(query)
+  }
+}
 
-    // 2. Perform semantic search
-    await marketsPage.searchMarkets('election')
+// e2e/features/search-and-view.test.ts
+import { MarketsScreen } from '../screens/MarketsScreen'
+import { MarketDetailsScreen } from '../screens/MarketDetailsScreen'
 
-    // Wait for API response
-    await page.waitForResponse(resp =>
-      resp.url().includes('/api/markets/search') && resp.status() === 200
-    )
+describe('Market Search and View Flow', () => {
+  beforeAll(async () => {
+    await device.launchApp({ newInstance: true })
+  })
+
+  beforeEach(async () => {
+    await device.reloadReactNative()
+  })
+
+  it('user can search markets and view details', async () => {
+    // 1. Navigate to markets tab
+    await MarketsScreen.navigateTo()
+
+    // Verify screen loaded
+    await expect(MarketsScreen.header).toBeVisible()
+
+    // 2. Perform search
+    await MarketsScreen.search('election')
 
     // 3. Verify search results
-    const marketCards = marketsPage.marketCards
-    await expect(marketCards.first()).toBeVisible()
-    const resultCount = await marketCards.count()
-    expect(resultCount).toBeGreaterThan(0)
+    await waitFor(MarketsScreen.marketCards)
+      .toBeVisible()
+      .withTimeout(10000)
 
     // Take screenshot of search results
-    await page.screenshot({ path: 'artifacts/search-results.png' })
+    await device.takeScreenshot('search-results')
 
-    // 4. Click on first result
-    const firstMarketTitle = await marketCards.first().textContent()
-    await marketCards.first().click()
+    // 4. Tap on first result
+    await MarketsScreen.firstMarketCard.tap()
 
-    // 5. Verify market details page loads
-    await expect(page).toHaveURL(/\/markets\/[a-z0-9-]+/)
+    // 5. Verify market details screen loads
+    await waitFor(MarketDetailsScreen.marketName)
+      .toBeVisible()
+      .withTimeout(5000)
 
-    const detailsPage = new MarketDetailsPage(page)
-    await expect(detailsPage.marketName).toBeVisible()
-    await expect(detailsPage.marketDescription).toBeVisible()
+    await expect(MarketDetailsScreen.marketDescription).toBeVisible()
 
     // 6. Verify chart renders
-    await expect(detailsPage.priceChart).toBeVisible()
-
-    // Verify market name matches
-    const detailsTitle = await detailsPage.marketName.textContent()
-    expect(detailsTitle?.toLowerCase()).toContain(
-      firstMarketTitle?.toLowerCase().substring(0, 20) || ''
-    )
+    await expect(MarketDetailsScreen.priceChart).toBeVisible()
 
     // Take screenshot of market details
-    await page.screenshot({ path: 'artifacts/market-details.png' })
+    await device.takeScreenshot('market-details')
   })
 
-  test('search with no results shows empty state', async ({ page }) => {
-    const marketsPage = new MarketsPage(page)
-    await marketsPage.goto()
+  it('search with no results shows empty state', async () => {
+    await MarketsScreen.navigateTo()
 
     // Search for non-existent market
-    await marketsPage.searchMarkets('xyznonexistentmarket123456')
+    await MarketsScreen.search('xyznonexistentmarket123456')
 
     // Verify empty state
-    await expect(page.locator('[data-testid="no-results"]')).toBeVisible()
-    await expect(page.locator('[data-testid="no-results"]')).toContainText(
-      /no.*results|no.*markets/i
-    )
+    await waitFor(MarketsScreen.noResults)
+      .toBeVisible()
+      .withTimeout(5000)
 
-    const marketCount = await marketsPage.marketCards.count()
-    expect(marketCount).toBe(0)
+    await expect(MarketsScreen.noResults).toBeVisible()
   })
 
-  test('can clear search and see all markets again', async ({ page }) => {
-    const marketsPage = new MarketsPage(page)
-    await marketsPage.goto()
+  it('can clear search and see all markets again', async () => {
+    await MarketsScreen.navigateTo()
 
-    // Initial market count
-    const initialCount = await marketsPage.marketCards.count()
+    // Verify initial list is visible
+    await expect(MarketsScreen.marketCards).toBeVisible()
 
     // Perform search
-    await marketsPage.searchMarkets('trump')
-    await page.waitForLoadState('networkidle')
-
-    // Verify filtered results
-    const filteredCount = await marketsPage.marketCards.count()
-    expect(filteredCount).toBeLessThan(initialCount)
+    await MarketsScreen.search('trump')
+    await waitFor(MarketsScreen.marketCards)
+      .toBeVisible()
+      .withTimeout(10000)
 
     // Clear search
-    await marketsPage.searchInput.clear()
-    await page.waitForLoadState('networkidle')
+    await MarketsScreen.searchInput.clearText()
 
-    // Verify all markets shown again
-    const finalCount = await marketsPage.marketCards.count()
-    expect(finalCount).toBe(initialCount)
+    // Verify full list returns
+    await waitFor(MarketsScreen.marketCards)
+      .toBeVisible()
+      .withTimeout(10000)
   })
 })
 ```
@@ -159,21 +166,25 @@ test.describe('Market Search and View Flow', () => {
 ## Running Tests
 
 ```bash
+# Build the app first
+detox build -c ios.sim.debug
+
 # Run the generated test
-npx playwright test tests/e2e/markets/search-and-view.spec.ts
+detox test -c ios.sim.debug e2e/features/search-and-view.test.ts
 
-Running 3 tests using 3 workers
+ PASS  e2e/features/search-and-view.test.ts (14.832s)
+  Market Search and View Flow
+    ✓ user can search markets and view details (4218ms)
+    ✓ search with no results shows empty state (1832ms)
+    ✓ can clear search and see all markets again (2914ms)
 
-  ✓  [chromium] › search-and-view.spec.ts:5:3 › user can search markets and view details (4.2s)
-  ✓  [chromium] › search-and-view.spec.ts:52:3 › search with no results shows empty state (1.8s)
-  ✓  [chromium] › search-and-view.spec.ts:67:3 › can clear search and see all markets again (2.9s)
+Test Suites: 1 passed, 1 total
+Tests:       3 passed, 3 total
+Time:        14.832s
 
-  3 passed (9.1s)
-
-Artifacts generated:
-- artifacts/search-results.png
-- artifacts/market-details.png
-- playwright-report/index.html
+Artifacts saved to: e2e/artifacts/
+- e2e/artifacts/search-results.png
+- e2e/artifacts/market-details.png
 ```
 
 ## Test Report
@@ -182,24 +193,25 @@ Artifacts generated:
 ╔══════════════════════════════════════════════════════════════╗
 ║                    E2E Test Results                          ║
 ╠══════════════════════════════════════════════════════════════╣
-║ Status:     ✅ ALL TESTS PASSED                              ║
+║ Status:     ALL TESTS PASSED                                 ║
+║ Platform:   iOS Simulator (iPhone 15)                        ║
 ║ Total:      3 tests                                          ║
 ║ Passed:     3 (100%)                                         ║
 ║ Failed:     0                                                ║
 ║ Flaky:      0                                                ║
-║ Duration:   9.1s                                             ║
+║ Duration:   14.8s                                            ║
 ╚══════════════════════════════════════════════════════════════╝
 
 Artifacts:
-📸 Screenshots: 2 files
-📹 Videos: 0 files (only on failure)
-🔍 Traces: 0 files (only on failure)
-📊 HTML Report: playwright-report/index.html
+Screenshots: 2 files
+Videos: 0 files (only on failure)
+Device Logs: e2e/artifacts/device.log
+JUnit Report: e2e/artifacts/junit.xml
 
-View report: npx playwright show-report
+Re-run on Android: detox test -c android.emu.debug e2e/features/search-and-view.test.ts
 ```
 
-✅ E2E test suite ready for CI/CD integration!
+E2E test suite ready for CI/CD integration!
 ```
 
 ## Test Artifacts
@@ -207,27 +219,32 @@ View report: npx playwright show-report
 When tests run, the following artifacts are captured:
 
 **On All Tests:**
-- HTML Report with timeline and results
-- JUnit XML for CI integration
+- JUnit XML report for CI integration
+- Device logs for debugging
 
 **On Failure Only:**
 - Screenshot of the failing state
-- Video recording of the test
-- Trace file for debugging (step-by-step replay)
-- Network logs
-- Console logs
+- Video recording of the test run
+- UI hierarchy dump for element inspection
+- Full device/simulator logs
 
 ## Viewing Artifacts
 
 ```bash
-# View HTML report in browser
-npx playwright show-report
+# Artifacts are saved to e2e/artifacts/ by default
+ls e2e/artifacts/
 
-# View specific trace file
-npx playwright show-trace artifacts/trace-abc123.zip
+# View screenshots
+open e2e/artifacts/search-results.png
 
-# Screenshots are saved in artifacts/ directory
-open artifacts/search-results.png
+# View JUnit report
+cat e2e/artifacts/junit.xml
+
+# View device logs
+cat e2e/artifacts/device.log
+
+# Artifacts are organized by test name in CI
+ls e2e/artifacts/Market_Search_and_View_Flow/
 ```
 
 ## Flaky Test Detection
@@ -235,31 +252,30 @@ open artifacts/search-results.png
 If a test fails intermittently:
 
 ```
-⚠️  FLAKY TEST DETECTED: tests/e2e/markets/trade.spec.ts
+FLAKY TEST DETECTED: e2e/features/trade.test.ts
 
 Test passed 7/10 runs (70% pass rate)
 
 Common failure:
-"Timeout waiting for element '[data-testid="confirm-btn"]'"
+"Element with testID 'confirm-btn' not found"
 
 Recommended fixes:
-1. Add explicit wait: await page.waitForSelector('[data-testid="confirm-btn"]')
-2. Increase timeout: { timeout: 10000 }
-3. Check for race conditions in component
-4. Verify element is not hidden by animation
+1. Add explicit wait: await waitFor(element(by.id('confirm-btn'))).toBeVisible().withTimeout(5000)
+2. Increase global timeout in jest.config.js
+3. Check for race conditions in component mounting
+4. Verify element is not hidden by keyboard or modal
+5. Use device.reloadReactNative() for clean state
 
-Quarantine recommendation: Mark as test.fixme() until fixed
+Quarantine recommendation: Mark as it.skip() until fixed
 ```
 
-## Browser Configuration
+## Device Configuration
 
-Tests run on multiple browsers by default:
-- ✅ Chromium (Desktop Chrome)
-- ✅ Firefox (Desktop)
-- ✅ WebKit (Desktop Safari)
-- ✅ Mobile Chrome (optional)
+Tests run on the following devices by default:
+- iOS: iPhone 15 Simulator (iOS 17+)
+- Android: Pixel 7 Emulator (API 34)
 
-Configure in `playwright.config.ts` to adjust browsers.
+Configure in `.detoxrc.js` to adjust devices and configurations.
 
 ## CI/CD Integration
 
@@ -267,66 +283,71 @@ Add to your CI pipeline:
 
 ```yaml
 # .github/workflows/e2e.yml
-- name: Install Playwright
-  run: npx playwright install --with-deps
+# iOS
+- name: Install simulator utilities
+  run: brew tap wix/brew && brew install applesimutils
 
-- name: Run E2E tests
-  run: npx playwright test
+- name: Build iOS app
+  run: detox build -c ios.sim.release
+
+- name: Run E2E tests (iOS)
+  run: detox test -c ios.sim.release --headless --cleanup --retries 2
 
 - name: Upload artifacts
   if: always()
-  uses: actions/upload-artifact@v3
+  uses: actions/upload-artifact@v4
   with:
-    name: playwright-report
-    path: playwright-report/
+    name: detox-artifacts-ios
+    path: e2e/artifacts/
+
+# Android (use reactivecircus/android-emulator-runner)
+- name: Run E2E tests (Android)
+  uses: reactivecircus/android-emulator-runner@v2
+  with:
+    api-level: 34
+    script: |
+      detox build -c android.emu.release
+      detox test -c android.emu.release --headless --cleanup --retries 2
 ```
 
-## PMX-Specific Critical Flows
+## Critical Flows
 
-For PMX, prioritize these E2E tests:
+For Expo apps, prioritize these E2E tests:
 
-**🔴 CRITICAL (Must Always Pass):**
-1. User can connect wallet
-2. User can browse markets
-3. User can search markets (semantic search)
-4. User can view market details
-5. User can place trade (with test funds)
-6. Market resolves correctly
-7. User can withdraw funds
+**CRITICAL (Must Always Pass):**
+1. User can authenticate (sign up / log in / log out)
+2. User can navigate between tabs
+3. User can search and view items
+4. User can view detail screens
+5. Deep links resolve to correct screens
+6. Push notifications navigate correctly
+7. Offline/online transitions are handled
 
-**🟡 IMPORTANT:**
-1. Market creation flow
-2. User profile updates
-3. Real-time price updates
-4. Chart rendering
-5. Filter and sort markets
-6. Mobile responsive layout
+**IMPORTANT:**
+1. Form submission flows
+2. Pull-to-refresh behavior
+3. Modal and bottom sheet interactions
+4. Platform-specific behavior (iOS vs Android)
+5. Keyboard interactions and avoidance
+6. Orientation changes (if supported)
 
 ## Best Practices
 
 **DO:**
-- ✅ Use Page Object Model for maintainability
-- ✅ Use data-testid attributes for selectors
-- ✅ Wait for API responses, not arbitrary timeouts
-- ✅ Test critical user journeys end-to-end
-- ✅ Run tests before merging to main
-- ✅ Review artifacts when tests fail
+- Use Screen Object Model for maintainability
+- Use `testID` prop for selectors (React Native convention)
+- Wait for conditions with `waitFor().toBeVisible().withTimeout()`
+- Test critical journeys on BOTH iOS and Android
+- Run tests before merging to main
+- Review artifacts (screenshots, logs) when tests fail
 
 **DON'T:**
-- ❌ Use brittle selectors (CSS classes can change)
-- ❌ Test implementation details
-- ❌ Run tests against production
-- ❌ Ignore flaky tests
-- ❌ Skip artifact review on failures
-- ❌ Test every edge case with E2E (use unit tests)
-
-## Important Notes
-
-**CRITICAL for PMX:**
-- E2E tests involving real money MUST run on testnet/staging only
-- Never run trading tests against production
-- Set `test.skip(process.env.NODE_ENV === 'production')` for financial tests
-- Use test wallets with small test funds only
+- Use brittle selectors (text matchers break with i18n)
+- Test implementation details
+- Run tests against production
+- Ignore flaky tests
+- Skip artifact review on failures
+- Test every edge case with E2E (use unit tests)
 
 ## Integration with Other Commands
 
@@ -345,21 +366,30 @@ For manual installs, the source file lives at:
 ## Quick Commands
 
 ```bash
-# Run all E2E tests
-npx playwright test
+# Build for iOS simulator
+detox build -c ios.sim.debug
+
+# Build for Android emulator
+detox build -c android.emu.debug
+
+# Run all E2E tests (iOS)
+detox test -c ios.sim.debug
+
+# Run all E2E tests (Android)
+detox test -c android.emu.debug
 
 # Run specific test file
-npx playwright test tests/e2e/markets/search.spec.ts
+detox test -c ios.sim.debug e2e/features/search.test.ts
 
-# Run in headed mode (see browser)
-npx playwright test --headed
+# Run with retry on failure
+detox test -c ios.sim.debug --retries 3
 
-# Debug test
-npx playwright test --debug
+# Run headless (CI mode)
+detox test -c ios.sim.release --headless --cleanup
 
-# Generate test code
-npx playwright codegen http://localhost:3000
+# Reset simulator state
+detox test -c ios.sim.debug --reuse false
 
-# View report
-npx playwright show-report
+# Clean build artifacts
+detox clean-framework-cache && detox build-framework-cache
 ```
